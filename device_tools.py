@@ -2,6 +2,7 @@
 #coding: utf-8
 
 from cmd_tools import getstatusoutput
+import re
 
 def _getprop(deviceId, propName):
     cmd = '''adb -s {} shell getprop {}'''.format(deviceId, propName)
@@ -39,7 +40,50 @@ def getDeviceList():
         return devices
     return []
 
+# 获取每一部设备对应的名字和型号
+def getDeviceNameAndModel():
+    devicesList=getDeviceList()
+    ans={}
+    for d in devicesList:
+        sts,text=getstatusoutput("adb -s %s shell cat /system/build.prop | grep 'product'" % (d[0]))
+        result=[]
+        if sts==0:
+            manufacturer=re.match(r'.*manufacturer=([^\r\n]*).*',text,re.I|re.M|re.S)
+            if manufacturer:
+                result.append(manufacturer.group(1))
+            model=re.match(r'.*model=([^\r\n]*).*',text,re.I|re.M|re.S)
+            if model:
+                result.append(model.group(1))
+        ans[d[0]]='-'.join(result)
+    # print(ans)
+    return ans
+def getVersionName(package):
+    devices=getDeviceList()
+    if len(devices)>=1:
+        sts,text=getstatusoutput("adb -s %s shell dumpsys package %s | grep versionName"%(devices[0][0],package))
+        if sts==0:
+            print("versionName="+text[text.index("=")+1:])
+            return text[text.index("=")+1:text.index("=")+10]
+    return "versionNameError"
+
+# 设置屏幕常亮
+def setScreenAlwaysOn():
+    devices=getDeviceList()
+    for device in devices:
+        getstatusoutput("adb -s %s shell svc power stayon true"%device[0])
+
+# 取消屏幕常亮
+def cancelScreenAlwaysOn():
+    devices=getDeviceList()
+    for device in devices:
+        getstatusoutput("adb -s %s shell svc power stayon false"%device[0])
+
+def lockDevicesScreen():
+    devices=getDeviceList()
+    for device in devices:
+        getstatusoutput("adb -s %s shell input keyevent 223"%device[0])
+        
+
 if __name__ == "__main__":
     print ("judge the os type with manufacturer")
-    for d in getDeviceList():
-        print ("->".join(d))
+    getDeviceModel()

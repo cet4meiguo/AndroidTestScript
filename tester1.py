@@ -11,6 +11,7 @@ announce: 测试应用与主应用需要采用相同签名，默认编译的是 
 import os, sys
 import threading, thread, signal
 import time
+import re
 
 from cmd_tools import fixCmd, asyncExec, getstatusoutput
 from adb_tools import getPackageName, uninstallPackages, installApkInSilent, clearData
@@ -54,6 +55,30 @@ class _ResourceCapturer(threading.Thread):
                     return items[idIndex]
         raise Exception("special command<%s> not running in now" % cmdName)
 
+    def _getPIds(self, cmdName, isPhone = True):
+        if isPhone:
+            cmd = '''adb -s %s shell ps | grep "%s"''' % (self._deviceId, cmdName)
+            splitNum = 8
+            idIndex = 1
+        else:
+            sepPos = cmdName.find('|')
+            if sepPos > 0:
+                cmdName = cmdName[ : sepPos].rstrip()
+            cmd = '''ps | grep "%s"''' % cmdName
+            splitNum = 3
+            idIndex = 0
+
+        sts, text = getstatusoutput(cmd)
+        ans=[]
+        if sts == 0:
+            lines = text.split('\n')
+            for line in lines:
+                items = line.split(None, splitNum)
+                if cmdName in items[-1].strip():
+                    ans.append(items[idIndex])
+            return ans
+        raise Exception("special command<%s> not running in now" % cmdName)
+
     def _dumpMemInfo(self, cmd):
         '''
         dumpsys meminfo [pid] | grep TOTAL, return:
@@ -65,9 +90,15 @@ class _ResourceCapturer(threading.Thread):
         return []
 
     def _parseCpuInfo(self, line):
-        data = line.split()
+        data = []
+        result=re.match(r'.* (\d*)% .* (\d*)K.* (\d*)K .*',line,re.I)
+        if result:
+            for i in range(1,4):
+                data.append(result.group(i))
+        else:
+            print("error:_ResourceCapturer->_parseCpuInfo()->line error")
 
-        return [data[2].strip('%'), data[5].strip('K'), data[6].strip('K')]
+        return data
 
     def _saveItem(self, fp, info):
         if info:
@@ -149,17 +180,19 @@ class _ResourceCapturer(threading.Thread):
         self._stopFlag = True
         try:
             if self._cmd_dump_cpuinfo is not None:
-                top_pid = self._getPId(self._cmd_dump_cpuinfo, isPhone = False)
-                print ("send terminal signal to process: " + top_pid)
-                os.kill(int(top_pid), signal.SIGTERM)
+                top_pid = self._getPIds(self._cmd_dump_cpuinfo, isPhone = False)
+                for pid in top_pid:
+                    os.kill(int(pid), signal.SIGTERM)
+                    print ("send terminal signal to process: " + pid)
         except Exception, e:
             print (e)
 
         try:
             if self._cmd_dump_meminfo is not None:
-                mem_pid = self._getPId(self._cmd_dump_meminfo, isPhone = False)
-                print ("send terminal signal to process: " + mem_pid)
-                os.kill(int(mem_pid), signal.SIGTERM)
+                mem_pid = self._getPIds(self._cmd_dump_meminfo, isPhone = False)
+                for pid in mem_pid:
+                    os.kill(int(pid), signal.SIGTERM)
+                    print ("send terminal signal to process: " + pid)
         except Exception, e:
             print (e)
 
@@ -224,7 +257,7 @@ class Tester(object):
         targetPath = os.path.join(outPath, "livequality.log")
         print "self=",self._deviceId, self._targetPkg, targetPath
         #cmd = "adb -s %s pull /sdcard/zego_livedemo_live_quality.log %s" % (self._deviceId, targetPath)
-        cmd = "adb -s %s pull /sdcard/Android/%s/cache/zego_livedemo_live_quality.log %s" % (self._deviceId, self._targetPkg, targetPath)
+        cmd = "adb -s %s pull /sdcard/Android/data/%s/cache/zego_livedemo_live_quality.log %s" % (self._deviceId, self._targetPkg, targetPath)
         sts, text = getstatusoutput(cmd)
         print ("*** %d : %s ***\r\n" % (sts, text))
 

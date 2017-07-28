@@ -4,7 +4,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as picture
 
-
+# 画JPG图
 class Paint:
 	def __init__(self,picName):
 		self._dir=dir

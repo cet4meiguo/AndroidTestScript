@@ -6,12 +6,46 @@ the test will start here
 '''
 
 import os
+import shutil
 import argparse
 import time
 from device_tools import getDeviceList
+from device_tools import getDeviceNameAndModel
+from device_tools import setScreenAlwaysOn
+from device_tools import lockDevicesScreen
 from tester1 import Tester
 from paint import Paint
+from PaintSVG import PaintSVG
 from GetPermission import GetPermission
+from sendEmail import sendEmail
+from checkRunSuccess import Check
+from getLatestApkFromShare import get_latest_apk_from_share
+
+enters={
+"setting": "com.zego.livedemo5.testSettings",
+"performance":None
+}
+resultDir=(
+	"anchor_single_camera+mic",
+	"anchor_single_mic",
+	"anchor_single_camera",
+	"anchor_twoAnchorConnect",
+	"anchor_ThreeAnchorConnect",
+	"client_justEnterRoom",
+	"client_onlyCamera",
+	"client_onlyMic",
+	"settingTest"
+	)
+testPkg=(
+	"com.zego.livedemo5.anchorSingleCameraMic",
+	"com.zego.livedemo5.anchorSingleMic",
+	"com.zego.livedemo5.anchorSingleCamera",
+	"com.zego.livedemo5.anchorStartMoreAnchorRoom",
+	"com.zego.livedemo5.anchorConnectToMoreAnchorRoom",
+	"com.zego.livedemo5.anchorSingleCameraMic",
+	"com.zego.livedemo5.anchorSingleCamera",
+	"com.zego.livedemo5.anchorSingleMic"
+	)
 
 
 #scan the current folder to finder targetApk and testApk
@@ -53,33 +87,17 @@ def startGetPermission(permissionThread,devices):
 		per.start()
 		permissionThread.append(per)
 
+def removeExistFile(path):
+	if os.path.exists(path):
+		shutil.rmtree(path,True)
 
 if __name__=="__main__":
 	print ("start1,__main__")
-	enters={
-			"setting": "com.zego.livedemo5.testSettings",
-			"performance":None
-	}
-	resultDir=(
-		"anchor_single_camera+mic",
-		"anchor_single_mic",
-		"anchor_single_camera",
-		"anchor_twoAnchorConnect",
-		"anchor_ThreeAnchorConnect",
-		"client_justEnterRoom",
-		"client_onlyCamera",
-		"client_onlyMic",
-		"settingTest")
-	testPkg=(
-		"com.zego.livedemo5.anchorSingleCameraMic",
-		"com.zego.livedemo5.anchorSingleMic",
-		"com.zego.livedemo5.anchorSingleCamera",
-		"com.zego.livedemo5.anchorStartMoreAnchorRoom",
-		"com.zego.livedemo5.anchorConnectToMoreAnchorRoom",
-		"com.zego.livedemo5.anchorSingleCameraMic",
-		"com.zego.livedemo5.anchorSingleCamera",
-		"com.zego.livedemo5.anchorSingleMic"
-		)
+	if __name__!="__main__":
+		os.chdir(os.path.dirname(__file__))
+		
+	# get_latest_apk_from_share()
+
 	parse=argparse.ArgumentParser();
 
 	parse.add_argument('-a','--target',action='store',type=str,help="the apk path that will be test,default is current directory")
@@ -118,23 +136,33 @@ if __name__=="__main__":
 	
 	threads=[]
 	local_port=5555
-	device=devices[0]
+	collectDeviceId=devices[0][0]
+	runtime=2
+	setScreenAlwaysOn()
 
+	# 重定向终端输出至文件
+	# file=open("123.txt","w")
+	# sys.stdout=file
 	if args.mode=='performance':
-		# 主播端 单麦
+		# # 主播端 单麦
 		if len(devices)>=1:
 			startGetPermission(permissionThread,devices)
 			# time.sleep(10)
-			for i in range(0,3):
+			for i in range(0,1):
 				print ("targetApk=",targetApk," testApk=",testApk," testPkg=",testPkg[i])
-				tester=Tester(targetApk,testApk,testPkg[i])
-				tester.setDevice(device[0],local_port)
-				os.mkdir(os.path.join(resultPath,resultDir[i]))
-				tester.setOutputPath(os.path.join(resultPath,resultDir[i]))
-				t=tester.doRun()
-				threads.append(t)
+				
+				check=Check(runtime+2,os.path.join(resultPath,resultDir[i],collectDeviceId))
+				while not check.check():
+					removeExistFile(os.path.join(resultPath,resultDir[i]))
+					tester=Tester(targetApk,testApk,testPkg[i])
+					tester.setDevice(collectDeviceId,local_port)
+					os.mkdir(os.path.join(resultPath,resultDir[i]))
+					tester.setOutputPath(os.path.join(resultPath,resultDir[i]))
+					t=tester.doRun()
+					threads.append(t)
 
-				t.join()
+					t.join()
+
 				print ("-----"*5+" end "+resultDir[i]+" "+"-----"*5)
 
 			del threads[:]
@@ -147,29 +175,32 @@ if __name__=="__main__":
 		if len(devices)>=2:
 			startGetPermission(permissionThread,devices)
 			# time.sleep(10)
-			os.mkdir(os.path.join(resultPath,resultDir[3]))
 			print ("targetApk=",targetApk," testApk=",testApk," testPkg=",testPkg[3])
-			tester=Tester(targetApk,testApk,testPkg[3])
-			tester.setDevice(devices[0][0],local_port)
-			tester.setOutputPath(os.path.join(resultPath,resultDir[3]),"_anchor")
-			t=tester.doRun()
-			threads.append(t)
-			local_port+=1
+			check=Check(runtime+2,os.path.join(resultPath,resultDir[3],collectDeviceId+"_anchor"))
+			while not check.check():
+				removeExistFile(os.path.join(resultPath,resultDir[3]))
+				tester=Tester(targetApk,testApk,testPkg[3])
+				tester.setDevice(collectDeviceId,local_port)
+				os.mkdir(os.path.join(resultPath,resultDir[3]))
+				tester.setOutputPath(os.path.join(resultPath,resultDir[3]),"_anchor")
+				t=tester.doRun()
+				threads.append(t)
+				local_port+=1
 
-			time.sleep(120)#两分钟之后再开启连麦
-			print ("targetApk=",targetApk," testApk=",testApk," testPkg=",testPkg[4])
-			tester=Tester(targetApk,testApk,testPkg[4])
-			tester.setDevice(devices[1][0],local_port)
-			tester.setOutputPath(os.path.join(resultPath,resultDir[3]),"_otherAnchor_none")
-			t=tester.doRun()
-			threads.append(t)
+				time.sleep(120)#两分钟之后再开启连麦
+				print ("targetApk=",targetApk," testApk=",testApk," testPkg=",testPkg[4])
+				tester=Tester(targetApk,testApk,testPkg[4])
+				tester.setDevice(devices[1][0],local_port)
+				tester.setOutputPath(os.path.join(resultPath,resultDir[3]),"_otherAnchor_none")
+				t=tester.doRun()
+				threads.append(t)
 
-			while True:
-				for thread in threads:
-					if thread.is_alive()==False:
-						threads.remove(thread)
-				if len(threads)==0:
-					break
+				while True:
+					for thread in threads:
+						if thread.is_alive()==False:
+							threads.remove(thread)
+					if len(threads)==0:
+						break
 			clearGetPermission(permissionThread)
 			print ("-----"*5+" end "+resultDir[3]+" "+"-----"*5)
 		else:
@@ -180,64 +211,34 @@ if __name__=="__main__":
 		if len(devices)>=3:
 			startGetPermission(permissionThread,devices)
 			# time.sleep(10)
-			os.mkdir(os.path.join(resultPath,resultDir[4]))
 			print ("targetApk=",targetApk," testApk=",testApk," testPkg=",testPkg[3])
-			tester=Tester(targetApk,testApk,testPkg[3])
-			tester.setDevice(devices[0][0],local_port)
-			tester.setOutputPath(os.path.join(resultPath,resultDir[4]),"_anchor")
-			t=tester.doRun()
-			threads.append(t)
-			local_port+=1
-
-			time.sleep(120)#两分钟之后再开启连麦
-			print ("targetApk=",targetApk," testApk=",testApk," testPkg=",testPkg[4])
-			tester=Tester(targetApk,testApk,testPkg[4])
-			tester.setDevice(devices[1][0],local_port)
-			tester.setOutputPath(os.path.join(resultPath,resultDir[4]),"_otherAnchor_none")
-			t=tester.doRun()
-			threads.append(t)
-			local_port+=1
-
-			print ("targetApk=",targetApk," testApk=",testApk," testPkg=",testPkg[4])
-			tester=Tester(targetApk,testApk,testPkg[4])
-			tester.setDevice(devices[2][0],local_port)
-			tester.setOutputPath(os.path.join(resultPath,resultDir[4]),"_otherAnchor_none")
-			t=tester.doRun()
-			threads.append(t)
-			local_port+=1
-
-			while True:
-				for thread in threads:
-					if thread.is_alive()==False:
-						threads.remove(thread)
-				if len(threads)==0:
-					break
-			clearGetPermission(permissionThread)
-			print ("-----"*5+" end "+resultDir[4]+" "+"-----"*5)
-		else:
-			print("小于3个手机，无法进行3个主播连麦")
-
-		# # 客户端测试
-		devices=getDeviceList()
-		if len(devices)>=2:
-			startGetPermission(permissionThread,devices)
-			# time.sleep(10)
-			for i in range(5,8):
-				os.mkdir(os.path.join(resultPath,resultDir[i]))
-				tester=Tester(targetApk,testApk,testPkg[i])
-				tester.setDevice(devices[0][0],local_port)
-				tester.setOutputPath(os.path.join(resultPath,resultDir[i]),"_anchor_none")
+			check=Check(runtime+2,os.path.join(resultPath,resultDir[4],collectDeviceId+"_anchor"))
+			while not check.check():
+				removeExistFile(os.path.join(resultPath,resultDir[4]))
+				tester=Tester(targetApk,testApk,testPkg[3])
+				tester.setDevice(collectDeviceId,local_port)
+				os.mkdir(os.path.join(resultPath,resultDir[4]))
+				tester.setOutputPath(os.path.join(resultPath,resultDir[4]),"_anchor")
 				t=tester.doRun()
 				threads.append(t)
 				local_port+=1
 
-				time.sleep(120)#客户端在两分钟之后再进入
-				joinRoomPkg="com.zego.livedemo5.clientJoinPublishRoom"
-				tester=Tester(targetApk,testApk,joinRoomPkg)
+				time.sleep(120)#两分钟之后再开启连麦
+				print ("targetApk=",targetApk," testApk=",testApk," testPkg=",testPkg[4])
+				tester=Tester(targetApk,testApk,testPkg[4])
 				tester.setDevice(devices[1][0],local_port)
-				tester.setOutputPath(os.path.join(resultPath,resultDir[i]),"_client")
+				tester.setOutputPath(os.path.join(resultPath,resultDir[4]),"_otherAnchor_none")
 				t=tester.doRun()
 				threads.append(t)
+				local_port+=1
+
+				print ("targetApk=",targetApk," testApk=",testApk," testPkg=",testPkg[4])
+				tester=Tester(targetApk,testApk,testPkg[4])
+				tester.setDevice(devices[2][0],local_port)
+				tester.setOutputPath(os.path.join(resultPath,resultDir[4]),"_otherAnchor_none")
+				t=tester.doRun()
+				threads.append(t)
+				local_port+=1
 
 				while True:
 					for thread in threads:
@@ -245,18 +246,68 @@ if __name__=="__main__":
 							threads.remove(thread)
 					if len(threads)==0:
 						break
+			clearGetPermission(permissionThread)
+			print ("-----"*5+" end "+resultDir[4]+" "+"-----"*5)
+		else:
+			print("小于3个手机，无法进行3个主播连麦")
 
-				print ("-----"*5+" end "+resultDir[i]+" "+"-----"*5)
+		# 客户端测试
+		devices=getDeviceList()
+		if len(devices)>=2:
+			startGetPermission(permissionThread,devices)
+			# time.sleep(10)
+			for i in range(5,8):
+				check=Check(runtime,os.path.join(resultPath,resultDir[i],collectDeviceId+"_client"))
+				while not check.check():
+					removeExistFile(os.path.join(resultPath,resultDir[i]))
+					tester=Tester(targetApk,testApk,testPkg[i])
+					tester.setDevice(devices[1][0],local_port)
+					os.mkdir(os.path.join(resultPath,resultDir[i]))
+					tester.setOutputPath(os.path.join(resultPath,resultDir[i]),"_anchor_none")
+					t=tester.doRun()
+					threads.append(t)
+					local_port+=1
+
+					time.sleep(120)#客户端在两分钟之后再进入
+					joinRoomPkg="com.zego.livedemo5.clientJoinPublishRoom"
+					tester=Tester(targetApk,testApk,joinRoomPkg)
+					tester.setDevice(collectDeviceId,local_port)
+					tester.setOutputPath(os.path.join(resultPath,resultDir[i]),"_client")
+					t=tester.doRun()
+					threads.append(t)
+
+					while True:
+						for thread in threads:
+							if thread.is_alive()==False:
+								threads.remove(thread)
+						if len(threads)==0:
+							break
+
+					print ("-----"*5+" end "+resultDir[i]+" "+"-----"*5)
 			clearGetPermission(permissionThread)
 
 		else:
 			print("小于两个手机，无法测试客户端")
 
-		# 绘图
-		painter=Paint(resultDir)
-		painter.setSaveDir(resultPath)
-		painter.getPaintDoc(resultPath)
-		painter.paint()
+		# 绘图 JPG
+		# painter=Paint(resultDir)
+		# painter.setSaveDir(resultPath)
+		# painter.getPaintDoc(resultPath)
+		# painter.paint()
+		# 绘图 SVG
+		deviceNameAndModel=getDeviceNameAndModel()
+		paintSvg=PaintSVG(resultPath,deviceNameAndModel)
+		paintSvg.paint()
+
+		# 发送邮件
+		senderAcount="wujinyong@zego.im"
+		senderPassword="V3VqaW55b25nMTIz"
+		receiver=["wujinyong@zego.im","randyqiu@zego.im",
+		"markwu@zego.im","uei.zeng@zego.im"]
+		send=sendEmail(senderAcount,senderPassword,receiver,resultPath)
+		send.send()
+
+		# lockDevicesScreen()
 
 		
 
